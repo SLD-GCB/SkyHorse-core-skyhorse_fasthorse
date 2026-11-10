@@ -1,0 +1,22 @@
+{
+  "log": { "level": "debug" },
+  "inbounds": [ { "type": "socks", "tag": "socks-in", "listen": "127.0.0.1", "listen_port": 21086 } ],
+  "outbounds": [
+    {
+      "type": "fasthorse",
+      "tag": "proxy",
+      "server": "127.0.0.1",
+      "server_port": 29664,
+      "username": "alice",
+      "password": "secret",
+      "obfs": { "password": "kuaima-obfs-2026" },
+      "tls": {
+        "enabled": true,
+        "server_name": "localhost",
+        "insecure": true
+      }
+    },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": { "final": "proxy" }
+}

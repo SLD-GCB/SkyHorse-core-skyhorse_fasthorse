@@ -1,0 +1,17 @@
+{
+  "log": { "level": "debug" },
+  "inbounds": [
+    {
+      "type": "fasthorse",
+      "tag": "fh-hop",
+      "listen": "127.0.0.1",
+      "listen_port": 29674,
+      "listen_port_range": "29674:29676",
+      "users": [ { "username": "alice", "password": "secret" } ],
+      "obfs": { "password": "kuaima-obfs-2026" },
+      "tls": { "enabled": true, "certificate_path": "e2e/cert.pem", "key_path": "e2e/key.pem" }
+    }
+  ],
+  "outbounds": [ { "type": "direct", "tag": "direct" } ],
+  "route": { "final": "direct" }
+}

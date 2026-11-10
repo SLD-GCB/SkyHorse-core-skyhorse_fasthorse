@@ -1,0 +1,14 @@
+{
+    "port":  29553,
+    "certificate_path":  "e2e/cert.pem",
+    "users":  [
+                  {
+                      "uuid":  "alice-1",
+                      "name":  "alice",
+                      "password":  "secret"
+                  }
+              ],
+    "key_path":  "e2e/key.pem",
+    "listen":  "127.0.0.1",
+    "obfs_password":  "tianma-obfs-2026"
+}

@@ -1,0 +1,32 @@
+SkyHorse（天马）
+Copyright (C) 2026 SLD-GCB
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------
+
+Third-party notices
+
+1. Congestion control
+   Portions of tianma/internal/congestion (Brutal, BBR, pacer) are derived from
+   Hysteria, Copyright (c) 2022 apernet, licensed under the MIT License.
+   https://github.com/apernet/hysteria
+
+2. Kernel adapter
+   The singbox/ directory links against sing-box, Copyright (C) 2022 SagerNet,
+   licensed under the GNU General Public License v3.0.
+   https://github.com/SagerNet/sing-box
+
+3. QUIC
+   Transport is provided by github.com/apernet/quic-go, licensed under the
+   MIT License.
