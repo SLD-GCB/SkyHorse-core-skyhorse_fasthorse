@@ -1,4 +1,4 @@
-# SkyHorse Core
+﻿# SkyHorse Core
 
 天马（SkyHorse）与快马（FastHorse）代理协议的 sing-box 内核源码，包含协议核心、sing-box 适配层、构建脚本和三端产物说明。
 
@@ -125,9 +125,20 @@ SkyHorse-Kernels-1.14.4/
 - [故障排查](docs/TROUBLESHOOTING.md)
 - [天马 / 快马面板配置](tianma/PANEL-CONFIG-GUIDE.md)
 
+
+## 许可证与上游声明
+
+- 本仓库原创部分以 **GNU Affero General Public License v3.0（AGPL-3.0）** 发布，完整文本见 [LICENSE](LICENSE)。
+- `singbox/` 适配层链接并使用 **sing-box**，Copyright (C) 2022 SagerNet，遵循 **GNU General Public License v3.0（GPL-3.0）**，上游源码：<https://github.com/SagerNet/sing-box>。
+- AGPL-3.0 第 13 条提供了与 GPL-3.0 代码结合的许可；sing-box 部分仍遵循 GPL-3.0，相关版权与许可证声明保留在 [NOTICE](NOTICE)。
+- `tianma/internal/congestion` 的部分拥塞控制代码来自 Hysteria（MIT），QUIC 传输使用 `github.com/apernet/quic-go`（MIT），详见 [NOTICE](NOTICE)。
+- 通过网络使用本项目的修改版时，应按 AGPL-3.0 向用户提供对应源码；分发时请保留本仓库和上游的版权、许可证与 NOTICE。
+
+> 以上是项目许可证说明，不构成法律意见；商业闭源集成前请自行确认 AGPL-3.0 / GPL-3.0 的合规边界。
 ## 说明
 
 - 天马不与 Hysteria 2 互通，也不是它的分支。
 - 自研协议没有公开审计，不能宣称“绝对安全”或“完全隐藏”。
 - 服务端内核包含 IPv4 优先修复；客户端内核与 Android libbox 来自同一份源码。
 - 替换内核前先停止对应服务或客户端内核，替换后恢复执行权限。
+
