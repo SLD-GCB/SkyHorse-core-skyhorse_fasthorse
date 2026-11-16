@@ -23,6 +23,7 @@ import (
 	"github.com/sagernet/sing-box/adapter/inbound"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-mux"
+	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -315,7 +316,7 @@ func (h *Inbound) handleStream(stream *quic.Stream, conn *quic.Conn, state *conn
 	h.configureCongestion(conn)
 	switch command {
 	case 1:
-		h.handleTCP(stream, target, user)
+		h.handleTCP(stream, reader, M.ParseSocksaddr(conn.RemoteAddr().String()), target, user)
 	case 3:
 		state.associated.Store(true)
 		if err := writeSocksReply(stream); err != nil {
@@ -392,7 +393,7 @@ func (h *Inbound) configureCongestion(conn *quic.Conn) {
 	core.UseBrutal(conn, h.maxTxBps, h.disableLossCompensation)
 }
 
-func (h *Inbound) handleTCP(stream *quic.Stream, target string, _ User) {
+func (h *Inbound) handleTCP(stream *quic.Stream, reader *bufio.Reader, source M.Socksaddr, target string, user User) {
 	host, portText, err := net.SplitHostPort(target)
 	if err != nil {
 		_ = writeSocksFailure(stream)
@@ -403,87 +404,111 @@ func (h *Inbound) handleTCP(stream *quic.Stream, target string, _ User) {
 		_ = writeSocksFailure(stream)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 保留天马自己的目的地策略检查，但不再直接拨号。
+	checkCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	ip, err := h.policy.Check(ctx, host, uint16(port))
-	if err != nil {
+	if _, err = h.policy.Check(checkCtx, host, uint16(port)); err != nil {
 		_ = writeSocksFailure(stream)
 		return
 	}
-	dialTarget := net.JoinHostPort(ip.String(), portText)
-	conn, err := net.DialTimeout("tcp", dialTarget, 10*time.Second)
-	if err != nil {
-		_ = writeSocksFailure(stream)
+	if err = writeSocksReply(stream); err != nil {
 		return
 	}
-	defer conn.Close()
-	if err := writeSocksReply(stream); err != nil {
-		return
+	metadata := adapter.InboundContext{
+		Inbound:     h.Tag(),
+		InboundType: h.Type(),
+		Network:     N.NetworkTCP,
+		Source:      source,
+		Destination: M.ParseSocksaddr(target),
+		User:        user.Name,
 	}
-	go func() {
-		_, _ = io.Copy(conn, stream)
-		if tcp, ok := conn.(*net.TCPConn); ok {
-			_ = tcp.CloseWrite()
-		}
-	}()
-	_, _ = io.Copy(stream, conn)
+	done := make(chan struct{})
+	var once sync.Once
+	h.router.RouteConnectionEx(context.Background(), &streamNetConn{
+		Reader: reader,
+		Writer: stream,
+		closer: stream,
+	}, metadata, func(error) {
+		once.Do(func() { close(done) })
+	})
+	select {
+	case <-done:
+	}
 }
 
-func (h *Inbound) handleDatagrams(ctx context.Context, conn *quic.Conn, state *connState, done <-chan struct{}) {
-	var socket *net.UDPConn
-	defer func() {
-		if socket != nil {
-			_ = socket.Close()
-		}
-	}()
+type quicPacketConn struct {
+	ctx    context.Context
+	conn   *quic.Conn
+	state  *connState
+	policy *core.Policy
+}
+
+func (c *quicPacketConn) ReadPacket(buffer *buf.Buffer) (M.Socksaddr, error) {
 	for {
-		data, err := conn.ReceiveDatagram(ctx)
-		if err != nil {
-			return
-		}
-		if !state.associated.Load() {
+		if !c.state.associated.Load() {
+			select {
+			case <-c.ctx.Done():
+				return M.Socksaddr{}, c.ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
 			continue
+		}
+		data, err := c.conn.ReceiveDatagram(c.ctx)
+		if err != nil {
+			return M.Socksaddr{}, err
 		}
 		addr, payload, err := parseSocksUDP(data)
 		if err != nil {
 			continue
 		}
-		if h.policy != nil {
-			if _, err := h.policy.Check(ctx, addr.IP.String(), uint16(addr.Port)); err != nil {
+		if c.policy != nil {
+			if _, err = c.policy.Check(c.ctx, addr.IP.String(), uint16(addr.Port)); err != nil {
 				continue
 			}
 		}
-		if socket == nil {
-			socket, err = net.ListenUDP("udp", nil)
-			if err != nil {
-				return
-			}
-			go h.udpReplies(ctx, conn, socket, done)
+		if _, err = buffer.Write(payload); err != nil {
+			return M.Socksaddr{}, err
 		}
-		_, _ = socket.WriteToUDP(payload, addr)
+		return M.SocksaddrFromNet(addr), nil
 	}
 }
 
-func (h *Inbound) udpReplies(ctx context.Context, conn *quic.Conn, socket *net.UDPConn, done <-chan struct{}) {
-	buffer := make([]byte, 65535)
-	for {
-		select {
-		case <-done:
-			return
-		case <-ctx.Done():
-			return
-		default:
-		}
-		_ = socket.SetReadDeadline(time.Now().Add(time.Second))
-		n, addr, err := socket.ReadFromUDP(buffer)
-		if err != nil {
-			continue
-		}
-		payload, err := buildSocksUDP(addr.String(), buffer[:n])
-		if err != nil {
-			continue
-		}
-		_ = conn.SendDatagram(payload)
+func (c *quicPacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
+	data, err := buildSocksUDP(destination.String(), buffer.Bytes())
+	if err != nil {
+		return err
+	}
+	return c.conn.SendDatagram(data)
+}
+
+func (c *quicPacketConn) Close() error                       { return nil }
+func (c *quicPacketConn) LocalAddr() net.Addr                { return dummyAddr("skyhorse-quic-local") }
+func (c *quicPacketConn) RemoteAddr() net.Addr               { return dummyAddr("skyhorse-quic-remote") }
+func (c *quicPacketConn) SetDeadline(t time.Time) error      { return nil }
+func (c *quicPacketConn) SetReadDeadline(t time.Time) error  { return nil }
+func (c *quicPacketConn) SetWriteDeadline(t time.Time) error { return nil }
+
+func (h *Inbound) handleDatagrams(ctx context.Context, conn *quic.Conn, state *connState, done <-chan struct{}) {
+	packetConn := &quicPacketConn{
+		ctx:    ctx,
+		conn:   conn,
+		state:  state,
+		policy: h.policy,
+	}
+	metadata := adapter.InboundContext{
+		Inbound:     h.Tag(),
+		InboundType: h.Type(),
+		Network:     N.NetworkUDP,
+		Source:      M.ParseSocksaddr(conn.RemoteAddr().String()),
+	}
+	closed := make(chan struct{})
+	var once sync.Once
+	h.router.RoutePacketConnectionEx(ctx, packetConn, metadata, func(error) {
+		once.Do(func() { close(closed) })
+	})
+	select {
+	case <-closed:
+	case <-ctx.Done():
 	}
 }
 
