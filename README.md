@@ -1,5 +1,7 @@
 ﻿# SkyHorse Core
 
+_**本人在此郑重声明，我基于singbox二次开发的singbox内核遵守AGPLv3.0协议，源码成品开源，不存在公开售卖和索要任何赞助的行为，如有假冒请勿上当**_
+
 天马（SkyHorse）与快马（FastHorse）代理协议的 sing-box 内核源码，包含协议核心、sing-box 适配层、构建脚本和三端产物说明。
 
 ## 项目组成
